@@ -26,6 +26,10 @@ public class AESEncryptor {
         System.loadLibrary("Encryption");
     }
     private  native byte[] doAESencrypt(Context mContext,String payload);
+
+    public native byte[] encrypt(byte[] plaintext, byte[] key, byte[] iv);
+    public native byte[] decrypt(byte[] ciphertext, byte[] key, byte[] iv);
+
     //Make class Singleton
     private static AESEncryptor ourInstance ;//= new AESEncryptor();
 

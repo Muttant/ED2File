@@ -19,13 +19,22 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 
 public class MainActivity extends AppCompatActivity {
 
     // Used to load the 'tt' library on application startup.
 
+    private static final String INPUT_KEY = "vietnam";
+    private static final byte[] AES_KEY = generateKey(INPUT_KEY);
+    private static final byte[] INIT_VECTOR = generateInitVector();
     private static final int PICK_TXT_FILE = 1;
     private static final int CREATE_FILE = 2;
+    private static final String GIAI_MA = "Giải mã";
+    private static final String MA_HOA = "Mã hóa";
+    private static final String HEADER_FILE = "ENCRYPTED_FILE";
 
     private WebView webView;
     private Button selectFileButton;
@@ -73,13 +82,27 @@ public class MainActivity extends AppCompatActivity {
 
 //                Toast.makeText(this, encryptedText, Toast.LENGTH_SHORT).show();
                 // Hiển thị nút lưu file sau khi chọn file thành công
+                if (isEncryptedFile(fileContent.getBytes())) {
+                    saveFileButton.setText("Giải mã");
+                } else {
+                    saveFileButton.setText("Mã hóa");
+                }
+
                 saveFileButton.setVisibility(Button.VISIBLE);
 
             }
         } else if (requestCode == CREATE_FILE && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri != null) {
-                saveTextFile(uri);
+                if (!isEncryptedFile(fileContent.getBytes())) {
+                    byte[] encryptedText = AESEncryptor.getInstance().encrypt(fileContent.getBytes(), AES_KEY, INIT_VECTOR);
+                    saveTextFile(uri, concatenate(HEADER_FILE.getBytes(), encryptedText));
+                } else {
+                    byte[] input = removeHeader(fileContent.getBytes());
+                    byte[] encryptedText = AESEncryptor.getInstance().decrypt(input, AES_KEY, INIT_VECTOR);
+                    saveTextFile(uri, encryptedText);
+                }
+
 
                 // Sau khi lưu xong, ẩn nút lưu và xóa nội dung WebView
                 saveFileButton.setVisibility(Button.GONE);
@@ -88,29 +111,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void readTextFile(Uri uri) {
-        try {
-            InputStream inputStream = getContentResolver().openInputStream(uri);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-
-            StringBuilder stringBuilder = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                stringBuilder.append(line).append("\n");
-            }
-            reader.close();
-
-            fileContent = stringBuilder.toString();
-            String formattedText = "<pre>" + fileContent + "</pre>";
-            // Hiển thị nội dung trong WebView
-            webView.loadDataWithBaseURL(null, formattedText, "text/html", "UTF-8", null);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
     // Hiển thị dialog để người dùng nhập tên file mới
+
     private void showSaveDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Nhập tên file mới");
@@ -140,13 +142,40 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(intent, CREATE_FILE);
     }
 
+    private void readTextFile(Uri uri) {
+        try {
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+
+            StringBuilder stringBuilder = new StringBuilder();
+            StringBuilder d = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                d.append(line);
+                stringBuilder.append(line);
+            }
+            reader.close();
+
+            if (d.toString().contains(HEADER_FILE)) {
+                fileContent = d.toString();
+            } else {
+                fileContent = stringBuilder.toString();
+            }
+            String formattedText = "<pre>" + fileContent + "</pre>";
+            // Hiển thị nội dung trong WebView
+            webView.loadDataWithBaseURL(null, formattedText, "text/html", "UTF-8", null);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     // Lưu nội dung vào file mới
-    private void saveTextFile(Uri uri) {
+    private void saveTextFile(Uri uri, byte[] data) {
         try {
             OutputStream outputStream = getContentResolver().openOutputStream(uri);
             if (outputStream != null) {
-                String encryptedText = AESEncryptor.getInstance().encryptAES(this,fileContent);
-                outputStream.write(encryptedText.getBytes());
+                outputStream.write(data);
                 outputStream.close();
                 Toast.makeText(this, "File đã được lưu", Toast.LENGTH_SHORT).show();
             }
@@ -156,40 +185,65 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+
+    public static byte[] removeHeader(byte[] data) {
+        // Xác định độ dài của header
+        int headerLength = HEADER_FILE.getBytes().length;
+
+        // Tạo mảng mới để lưu phần dữ liệu đã được mã hóa (sau header)
+        byte[] encryptedData = new byte[data.length - headerLength];
+
+        // Sao chép dữ liệu sau header vào mảng encryptedData
+        System.arraycopy(data, headerLength, encryptedData, 0, encryptedData.length);
+
+        return encryptedData;
+    }
+
+    public static byte[] generateKey(String input) {
+        try {
+            // Sử dụng SHA-256 để băm chuỗi đầu vào "vietnam"
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            byte[] key = sha.digest(input.getBytes()); // Băm chuỗi thành mảng byte 32-byte (256-bit)
+
+            // Trả về mảng byte 32-byte dùng làm khóa AES-256
+            return key;
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static byte[] generateInitVector() {
+        SecureRandom random = new SecureRandom();
+        byte[] key = new byte[32]; // 256 bit
+        random.nextBytes(key);
+        return key;
+    }
+
+    public static byte[] concatenate(byte[] array1, byte[] array2) {
+        byte[] result = new byte[array1.length + array2.length];
+        System.arraycopy(array1, 0, result, 0, array1.length);
+        System.arraycopy(array2, 0, result, array1.length, array2.length);
+        return result;
+    }
+
+    public static boolean isEncryptedFile(byte[] data) {
+        // Xác định header bạn đã thêm vào (ví dụ "ENCRYPTED_FILE")
+
+        byte[] headerBytes = HEADER_FILE.getBytes();
+
+        // Kiểm tra xem độ dài dữ liệu có đủ để chứa header không
+        if (data.length < headerBytes.length) {
+            return false; // Dữ liệu quá ngắn, không thể chứa header
+        }
+
+        // So sánh header của dữ liệu với header dự kiến
+        for (int i = 0; i < headerBytes.length; i++) {
+            if (data[i] != headerBytes[i]) {
+                return false; // Header không khớp
+            }
+        }
+
+        return true; // Header khớp, dữ liệu có thể là tệp mã hóa
+    }
 }
-
-
-//import androidx.appcompat.app.AppCompatActivity;
-//
-//import android.os.Bundle;
-//import android.widget.TextView;
-//
-//import com.example.tt.databinding.ActivityMainBinding;
-//
-//public class MainActivity extends AppCompatActivity {
-//
-//    // Used to load the 'tt' library on application startup.
-//    static {
-//        System.loadLibrary("tt");
-//    }
-//
-//    private ActivityMainBinding binding;
-//
-//    @Override
-//    protected void onCreate(Bundle savedInstanceState) {
-//        super.onCreate(savedInstanceState);
-//
-//        binding = ActivityMainBinding.inflate(getLayoutInflater());
-//        setContentView(binding.getRoot());
-//
-//        // Example of a call to a native method
-//        TextView tv = binding.sampleText;
-//        tv.setText(stringFromJNI());
-//    }
-//
-//    /**
-//     * A native method that is implemented by the 'tt' native library,
-//     * which is packaged with this application.
-//     */
-//    public native String stringFromJNI();
-//}
