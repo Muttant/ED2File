@@ -93,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
 //                } else {
 //                    saveFileButton.setText("Mã hóa");
 //                }
-                if (IS_EN_F) {
+                if (isEncryptedFile(fileContentByte)) {
                     saveFileButton.setText("Giải mã");
                 } else {
                     saveFileButton.setText("Mã hóa");
@@ -105,15 +105,15 @@ public class MainActivity extends AppCompatActivity {
         } else if (requestCode == CREATE_FILE && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri != null) {
-                if (!IS_EN_F) {
+                if (!isEncryptedFile(fileContentByte)) {
                     encryptedText = AESEncryptor.getInstance().encrypt(fileContentByte, AES_KEY, INIT_VECTOR);
-//                    saveTextFile(uri, concatenate(HEADER_FILE.getBytes(), encryptedText));
-                    saveTextFile(uri, encryptedText);
+                    saveTextFile(uri, concatenate(HEADER_FILE.getBytes(), encryptedText));
+//                    saveTextFile(uri, encryptedText);
                     IS_EN_F = true;
                 } else {
-//                    byte[] input = removeHeader(fileContent.getBytes());
-                    byte[] d = fileContent.getBytes();
-                    byte[] tt = AESEncryptor.getInstance().decrypt(fileContentByte, AES_KEY, INIT_VECTOR);
+                    byte[] input = removeHeader(fileContentByte);
+//                    byte[] d = fileContent.getBytes();
+                    byte[] tt = AESEncryptor.getInstance().decrypt(input, AES_KEY, INIT_VECTOR);
                     saveTextFile(uri, tt);
                     IS_EN_F = false;
                 }
