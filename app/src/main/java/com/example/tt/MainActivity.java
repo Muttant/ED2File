@@ -16,9 +16,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.example.mylibrary.AESEncryptor;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -35,11 +37,14 @@ public class MainActivity extends AppCompatActivity {
     private static final String GIAI_MA = "Giải mã";
     private static final String MA_HOA = "Mã hóa";
     private static final String HEADER_FILE = "ENCRYPTED_FILE";
+    private static boolean IS_EN_F = false;
+    byte[] encryptedText;
 
     private WebView webView;
     private Button selectFileButton;
     private Button saveFileButton;
     private String fileContent = "";
+    private byte[] fileContentByte;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,11 +83,17 @@ public class MainActivity extends AppCompatActivity {
             Uri uri = data.getData();
             if (uri != null) {
                 // Đọc nội dung của file được chọn và hiển thị trong WebView
-                readTextFile(uri);
+//                readTextFile(uri);
+                readBinaryFile(uri);
 
 //                Toast.makeText(this, encryptedText, Toast.LENGTH_SHORT).show();
                 // Hiển thị nút lưu file sau khi chọn file thành công
-                if (isEncryptedFile(fileContent.getBytes())) {
+//                if (isEncryptedFile(fileContent.getBytes())) {
+//                    saveFileButton.setText("Giải mã");
+//                } else {
+//                    saveFileButton.setText("Mã hóa");
+//                }
+                if (IS_EN_F) {
                     saveFileButton.setText("Giải mã");
                 } else {
                     saveFileButton.setText("Mã hóa");
@@ -94,13 +105,17 @@ public class MainActivity extends AppCompatActivity {
         } else if (requestCode == CREATE_FILE && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri != null) {
-                if (!isEncryptedFile(fileContent.getBytes())) {
-                    byte[] encryptedText = AESEncryptor.getInstance().encrypt(fileContent.getBytes(), AES_KEY, INIT_VECTOR);
-                    saveTextFile(uri, concatenate(HEADER_FILE.getBytes(), encryptedText));
-                } else {
-                    byte[] input = removeHeader(fileContent.getBytes());
-                    byte[] encryptedText = AESEncryptor.getInstance().decrypt(input, AES_KEY, INIT_VECTOR);
+                if (!IS_EN_F) {
+                    encryptedText = AESEncryptor.getInstance().encrypt(fileContentByte, AES_KEY, INIT_VECTOR);
+//                    saveTextFile(uri, concatenate(HEADER_FILE.getBytes(), encryptedText));
                     saveTextFile(uri, encryptedText);
+                    IS_EN_F = true;
+                } else {
+//                    byte[] input = removeHeader(fileContent.getBytes());
+                    byte[] d = fileContent.getBytes();
+                    byte[] tt = AESEncryptor.getInstance().decrypt(fileContentByte, AES_KEY, INIT_VECTOR);
+                    saveTextFile(uri, tt);
+                    IS_EN_F = false;
                 }
 
 
@@ -140,6 +155,49 @@ public class MainActivity extends AppCompatActivity {
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TITLE, fileName);
         startActivityForResult(intent, CREATE_FILE);
+    }
+
+
+    private void readBinaryFile(Uri uri) {
+        try {
+            // Mở InputStream để đọc tệp nhị phân
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+
+            // Đọc toàn bộ nội dung nhị phân vào một mảng byte
+            ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+            int bufferSize = 1024;
+            byte[] buffer = new byte[bufferSize];
+
+            int len = 0;
+            while ((len = inputStream.read(buffer)) != -1) {
+                byteBuffer.write(buffer, 0, len);
+            }
+
+            fileContentByte = byteBuffer.toByteArray(); // Dữ liệu nhị phân
+
+            inputStream.close();
+
+
+
+            // Ép kiểu nhị phân thành chuỗi ký tự (nếu dữ liệu là văn bản)
+            String fileContent = new String(fileContentByte, StandardCharsets.UTF_8); // Ép kiểu thành chuỗi UTF-8
+
+//            // Xử lý theo điều kiện của bạn
+//            if (fileContent.contains(HEADER_FILE)) {
+//                // Nếu có HEADER_FILE, dùng toàn bộ nội dung file
+//                fileContent = new String(binaryData, StandardCharsets.UTF_8);
+//            } else {
+//                // Nếu không có HEADER_FILE, giữ lại nội dung như văn bản
+//                fileContent = fileContent.replace("\n", "");
+//            }
+
+            // Định dạng lại nội dung để hiển thị trong WebView
+            String formattedText = "<pre>" + fileContent + "</pre>";
+            webView.loadDataWithBaseURL(null, formattedText, "text/html", "UTF-8", null);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void readTextFile(Uri uri) {

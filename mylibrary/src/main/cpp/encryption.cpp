@@ -250,10 +250,6 @@ Java_com_example_mylibrary_AESEncryptor_doAESencrypt(JNIEnv *env, jobject instan
 
 
 void handleErrors() {
-    unsigned long err = ERR_get_error();
-    char buf[256];
-    ERR_error_string_n(err, buf, sizeof(buf));
-    std::cerr << "Decryption error: " << buf << std::endl;
     ERR_print_errors_fp(stderr);
     abort();
 }
@@ -303,62 +299,40 @@ Java_com_example_mylibrary_AESEncryptor_encrypt(JNIEnv *env, jobject thiz, jbyte
 extern "C"
 JNIEXPORT jbyteArray JNICALL
 Java_com_example_mylibrary_AESEncryptor_decrypt(JNIEnv *env, jobject thiz, jbyteArray ciphertext,
-                                                jbyteArray key, jbyteArray iv) {
+                                         jbyteArray key, jbyteArray iv) {
+    // Convert Java byte arrays to C++ byte arrays
     jbyte* ciphertextBytes = env->GetByteArrayElements(ciphertext, nullptr);
     jbyte* keyBytes = env->GetByteArrayElements(key, nullptr);
     jbyte* ivBytes = env->GetByteArrayElements(iv, nullptr);
 
     jsize ciphertextSize = env->GetArrayLength(ciphertext);
+
+    // Set up OpenSSL decryption context
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
-    if (ctx == nullptr) {
-        env->ReleaseByteArrayElements(ciphertext, ciphertextBytes, 0);
-        env->ReleaseByteArrayElements(key, keyBytes, 0);
-        env->ReleaseByteArrayElements(iv, ivBytes, 0);
-        return nullptr;
-    }
+    if (!ctx) handleErrors();
 
-    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr,
-                           reinterpret_cast<unsigned char*>(keyBytes),
-                           reinterpret_cast<unsigned char*>(ivBytes)) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
-        env->ReleaseByteArrayElements(ciphertext, ciphertextBytes, 0);
-        env->ReleaseByteArrayElements(key, keyBytes, 0);
-        env->ReleaseByteArrayElements(iv, ivBytes, 0);
-        return nullptr;
-    }
+    // Initialize decryption operation
+    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, reinterpret_cast<unsigned char*>(keyBytes), reinterpret_cast<unsigned char*>(ivBytes))) handleErrors();
 
-    std::vector<unsigned char> plaintext(ciphertextSize + EVP_MAX_BLOCK_LENGTH);
-    int len = 0;
-    int plaintext_len = 0;
+    // Provide the message to be decrypted
+    std::vector<unsigned char> plaintext(ciphertextSize);
+    int len;
+    if (1 != EVP_DecryptUpdate(ctx, plaintext.data(), &len, reinterpret_cast<unsigned char*>(ciphertextBytes), ciphertextSize)) handleErrors();
+    int plaintext_len = len;
 
-    if (EVP_DecryptUpdate(ctx, plaintext.data(), &len,
-                          reinterpret_cast<const unsigned char*>(ciphertextBytes),
-                          ciphertextSize) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
-        env->ReleaseByteArrayElements(ciphertext, ciphertextBytes, 0);
-        env->ReleaseByteArrayElements(key, keyBytes, 0);
-        env->ReleaseByteArrayElements(iv, ivBytes, 0);
-        return nullptr;
-    }
-    plaintext_len = len;
-
-    if (EVP_DecryptFinal_ex(ctx, plaintext.data() + len, &len) != 1) {
-        EVP_CIPHER_CTX_free(ctx);
-        env->ReleaseByteArrayElements(ciphertext, ciphertextBytes, 0);
-        env->ReleaseByteArrayElements(key, keyBytes, 0);
-        env->ReleaseByteArrayElements(iv, ivBytes, 0);
-        return nullptr;
-    }
+    // Finalize decryption
+    if (1 != EVP_DecryptFinal_ex(ctx, plaintext.data() + len, &len)) handleErrors();
     plaintext_len += len;
 
+    // Clean up
     EVP_CIPHER_CTX_free(ctx);
     env->ReleaseByteArrayElements(ciphertext, ciphertextBytes, 0);
     env->ReleaseByteArrayElements(key, keyBytes, 0);
     env->ReleaseByteArrayElements(iv, ivBytes, 0);
 
+    // Convert result to Java byte array
     jbyteArray result = env->NewByteArray(plaintext_len);
     env->SetByteArrayRegion(result, 0, plaintext_len, reinterpret_cast<jbyte*>(plaintext.data()));
 
     return result;
 }
-
