@@ -40,11 +40,19 @@ public class MainActivity extends AppCompatActivity {
     private static boolean IS_EN_F = false;
     byte[] encryptedText;
 
+    private static final byte[] HASH_KEY = "KEY".getBytes();
+    private static boolean isHash = false;
+    private static byte[] byteHash;
+    private static String strHash;
+
     private WebView webView;
     private Button selectFileButton;
     private Button saveFileButton;
     private String fileContent = "";
     private byte[] fileContentByte;
+    private Button hashButton;
+    private EditText editText;
+    private Button checkButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,6 +62,10 @@ public class MainActivity extends AppCompatActivity {
         webView = findViewById(R.id.webView);
         selectFileButton = findViewById(R.id.button_select_file);
         saveFileButton = findViewById(R.id.button_save_file);
+        hashButton = findViewById(R.id.button_hash);
+        editText = findViewById(R.id.edit_text);
+        checkButton = findViewById(R.id.check_button);
+
 
         // Cấu hình WebView cho phép cuộn ngang
         webView.setHorizontalScrollBarEnabled(true);
@@ -66,6 +78,10 @@ public class MainActivity extends AppCompatActivity {
         selectFileButton.setOnClickListener(v -> openFilePicker());
 
         saveFileButton.setOnClickListener(v -> showSaveDialog());
+
+        hashButton.setOnClickListener(v -> hashData());
+
+        checkButton.setOnClickListener(v -> checkHash());
     }
 
     private void openFilePicker() {
@@ -100,11 +116,22 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 saveFileButton.setVisibility(Button.VISIBLE);
+                hashButton.setVisibility(Button.VISIBLE);
+                editText.setVisibility(Button.GONE);
+                checkButton.setVisibility(Button.GONE);
 
+                isHash = false;
+                byteHash = null;
             }
         } else if (requestCode == CREATE_FILE && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri != null) {
+                if (isHash) {
+                    saveTextFile(uri, byteHash);
+
+                    return;
+                }
+
                 if (!isEncryptedFile(fileContentByte)) {
                     encryptedText = AESEncryptor.getInstance().encrypt(fileContentByte, AES_KEY, INIT_VECTOR);
                     saveTextFile(uri, concatenate(HEADER_FILE.getBytes(), encryptedText));
@@ -146,6 +173,40 @@ public class MainActivity extends AppCompatActivity {
         builder.setNegativeButton("Hủy", (dialog, which) -> dialog.cancel());
 
         builder.show();
+    }
+
+    private void hashData() {
+        if (fileContentByte == null) {
+            Toast.makeText(this, "Chưa chọn file", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        byteHash = AESEncryptor.getInstance().generateHMAC(HASH_KEY, fileContentByte);
+        strHash = new String(byteHash, StandardCharsets.UTF_8);
+
+        webView.loadDataWithBaseURL(null, strHash, "text/html", "UTF-8", null);
+
+        saveFileButton.setText("Lưu file");
+        hashButton.setVisibility(Button.GONE);
+        isHash = true;
+
+        editText.setVisibility(Button.VISIBLE);
+        checkButton.setVisibility(Button.VISIBLE);
+    }
+
+    private void checkHash() {
+        String dataCheck = editText.getText().toString();
+
+        if (dataCheck == null || dataCheck.isEmpty()) {
+            Toast.makeText(this, "Chưa có chuỗi", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (strHash.equals(dataCheck)) {
+            Toast.makeText(this, "Giống", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Khác", Toast.LENGTH_SHORT).show();
+        }
     }
 
     // Mở bộ chọn vị trí lưu file
@@ -304,4 +365,7 @@ public class MainActivity extends AppCompatActivity {
 
         return true; // Header khớp, dữ liệu có thể là tệp mã hóa
     }
+
+
+
 }

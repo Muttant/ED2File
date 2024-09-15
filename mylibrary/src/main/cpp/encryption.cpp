@@ -336,3 +336,30 @@ Java_com_example_mylibrary_AESEncryptor_decrypt(JNIEnv *env, jobject thiz, jbyte
 
     return result;
 }
+
+extern "C"
+JNIEXPORT jbyteArray JNICALL
+Java_com_example_mylibrary_AESEncryptor_generateHMAC(JNIEnv *env, jobject obj, jbyteArray keyArray, jbyteArray dataArray) {
+    // Chuyển đổi jbyteArray thành byte* của C
+    jbyte *key = env->GetByteArrayElements(keyArray, nullptr);
+    jsize keyLength = env->GetArrayLength(keyArray);
+    jbyte *data = env->GetByteArrayElements(dataArray, nullptr);
+    jsize dataLength = env->GetArrayLength(dataArray);
+
+    // Khởi tạo buffer cho HMAC output
+    unsigned char* result;
+    unsigned int result_len;
+
+    // Tạo HMAC sử dụng OpenSSL
+    result = HMAC(EVP_sha256(), key, keyLength, (unsigned char*)data, dataLength, nullptr, &result_len);
+
+    // Chuyển đổi kết quả thành jbyteArray
+    jbyteArray hmacArray = env->NewByteArray(result_len);
+    env->SetByteArrayRegion(hmacArray, 0, result_len, (jbyte*)result);
+
+    // Giải phóng các tài nguyên
+    env->ReleaseByteArrayElements(keyArray, key, JNI_ABORT);
+    env->ReleaseByteArrayElements(dataArray, data, JNI_ABORT);
+
+    return hmacArray;
+}

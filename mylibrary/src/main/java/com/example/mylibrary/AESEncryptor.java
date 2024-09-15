@@ -129,4 +129,7 @@ public class AESEncryptor {
     private static void printlog(String tag,String msg){
         Log.e(tag,msg);
     }
+
+
+    public native byte[] generateHMAC(byte[] key, byte[] data);
 }
